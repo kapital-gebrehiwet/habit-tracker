@@ -44,8 +44,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const { title, description } = await request.json();
-    console.log('Received habit data:', { title, description });
+    const { title, description, category, frequency, targetDays, reminderTime } = await request.json();
+    console.log('Received habit data:', { title, description, category, frequency, targetDays, reminderTime });
     
     if (!title) {
       return NextResponse.json(
@@ -60,8 +60,13 @@ export async function POST(request: Request) {
     const habit = await Habit.create({
       title,
       description,
+      category,
+      frequency,
+      targetDays,
+      reminderTime,
       userId: session.user.id,
       streak: 0,
+      longestStreak: 0,
       completedDates: []
     });
 

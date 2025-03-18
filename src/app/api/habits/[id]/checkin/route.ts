@@ -14,6 +14,8 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { mood, notes } = await request.json();
+
     await connectDB();
     const habit = await Habit.findOne({
       _id: params.id,
@@ -28,12 +30,32 @@ export async function POST(
     today.setHours(0, 0, 0, 0);
 
     const lastCheckIn = habit.completedDates.length > 0 
-      ? new Date(habit.completedDates[habit.completedDates.length - 1])
+      ? new Date(habit.completedDates[habit.completedDates.length - 1].date)
       : null;
 
     if (!lastCheckIn || lastCheckIn.getTime() < today.getTime()) {
-      habit.completedDates.push(today);
-      habit.streak += 1;
+      habit.completedDates.push({
+        date: today,
+        mood: mood || '😊',
+        notes: notes || ''
+      });
+      
+      // Update streak
+      if (lastCheckIn) {
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (lastCheckIn.getTime() === yesterday.getTime()) {
+          habit.streak += 1;
+          if (habit.streak > habit.longestStreak) {
+            habit.longestStreak = habit.streak;
+          }
+        } else {
+          habit.streak = 1;
+        }
+      } else {
+        habit.streak = 1;
+      }
+      
       await habit.save();
     }
 

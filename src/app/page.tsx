@@ -9,17 +9,30 @@ interface Habit {
   _id: string;
   title: string;
   description?: string;
+  category: string;
+  frequency: string;
+  targetDays: number;
   streak: number;
+  longestStreak: number;
+  isArchived: boolean;
 }
 
 export default function Home() {
   const { data: session, status } = useSession();
   const [showAddHabit, setShowAddHabit] = useState(false);
-  const [newHabit, setNewHabit] = useState({ title: '', description: '' });
+  const [newHabit, setNewHabit] = useState({ 
+    title: '', 
+    description: '', 
+    category: 'Other',
+    frequency: 'daily',
+    targetDays: 1,
+    reminderTime: ''
+  });
   const [habits, setHabits] = useState<Habit[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     if (session) {
@@ -57,10 +70,7 @@ export default function Home() {
       const response = await fetch('/api/habits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newHabit.title.trim(),
-          description: newHabit.description.trim()
-        }),
+        body: JSON.stringify(newHabit),
       });
 
       const data = await response.json();
@@ -70,7 +80,14 @@ export default function Home() {
       }
 
       setHabits([data, ...habits]);
-      setNewHabit({ title: '', description: '' });
+      setNewHabit({ 
+        title: '', 
+        description: '', 
+        category: 'Other',
+        frequency: 'daily',
+        targetDays: 1,
+        reminderTime: ''
+      });
       setShowAddHabit(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create habit');
@@ -80,17 +97,55 @@ export default function Home() {
     }
   }
 
-  async function handleCheckIn(habitId: string) {
+  async function handleCheckIn(habitId: string, mood: string, notes: string) {
     try {
       setIsLoading(true);
       setError('');
       const response = await fetch(`/api/habits/${habitId}/checkin`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mood, notes }),
       });
       if (!response.ok) throw new Error('Failed to check in');
-      await fetchHabits(); // Refresh habits to get updated streak
+      await fetchHabits();
     } catch (err) {
       setError('Failed to check in');
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleDeleteHabit(habitId: string) {
+    if (!confirm('Are you sure you want to delete this habit?')) return;
+
+    try {
+      setIsLoading(true);
+      setError('');
+      const response = await fetch(`/api/habits/${habitId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Failed to delete habit');
+      setHabits(habits.filter(habit => habit._id !== habitId));
+    } catch (err) {
+      setError('Failed to delete habit');
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleArchiveHabit(habitId: string) {
+    try {
+      setIsLoading(true);
+      setError('');
+      const response = await fetch(`/api/habits/${habitId}/archive`, {
+        method: 'POST',
+      });
+      if (!response.ok) throw new Error('Failed to archive habit');
+      await fetchHabits();
+    } catch (err) {
+      setError('Failed to archive habit');
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -120,17 +175,27 @@ export default function Home() {
     );
   }
 
+  const filteredHabits = habits.filter(habit => habit.isArchived === showArchived);
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="mx-auto max-w-4xl">
         <div className="mb-8 flex items-center justify-between">
           <h1 className="text-3xl font-bold text-gray-900">Your Habits</h1>
-          <button
-            onClick={() => setShowAddHabit(!showAddHabit)}
-            className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
-          >
-            {showAddHabit ? 'Cancel' : '+ Add Habit'}
-          </button>
+          <div className="flex gap-4">
+            <button
+              onClick={() => setShowArchived(!showArchived)}
+              className="rounded-lg bg-gray-500 px-4 py-2 text-white hover:bg-gray-600"
+            >
+              {showArchived ? 'Show Active' : 'Show Archived'}
+            </button>
+            <button
+              onClick={() => setShowAddHabit(!showAddHabit)}
+              className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+            >
+              {showAddHabit ? 'Cancel' : '+ Add Habit'}
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -170,6 +235,64 @@ export default function Home() {
                   rows={3}
                 />
               </div>
+              <div>
+                <label htmlFor="category" className="block text-sm font-medium text-gray-700">
+                  Category
+                </label>
+                <select
+                  id="category"
+                  value={newHabit.category}
+                  onChange={(e) => setNewHabit({ ...newHabit, category: e.target.value })}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="Health">Health</option>
+                  <option value="Productivity">Productivity</option>
+                  <option value="Learning">Learning</option>
+                  <option value="Lifestyle">Lifestyle</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="frequency" className="block text-sm font-medium text-gray-700">
+                  Frequency
+                </label>
+                <select
+                  id="frequency"
+                  value={newHabit.frequency}
+                  onChange={(e) => setNewHabit({ ...newHabit, frequency: e.target.value })}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="targetDays" className="block text-sm font-medium text-gray-700">
+                  Target Days per {newHabit.frequency === 'daily' ? 'Week' : newHabit.frequency === 'weekly' ? 'Month' : 'Year'}
+                </label>
+                <input
+                  type="number"
+                  id="targetDays"
+                  min="1"
+                  max={newHabit.frequency === 'daily' ? '7' : newHabit.frequency === 'weekly' ? '4' : '12'}
+                  value={newHabit.targetDays}
+                  onChange={(e) => setNewHabit({ ...newHabit, targetDays: parseInt(e.target.value) })}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="reminderTime" className="block text-sm font-medium text-gray-700">
+                  Reminder Time (optional)
+                </label>
+                <input
+                  type="time"
+                  id="reminderTime"
+                  value={newHabit.reminderTime}
+                  onChange={(e) => setNewHabit({ ...newHabit, reminderTime: e.target.value })}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none"
+                />
+              </div>
               <button
                 type="submit"
                 disabled={isCreating || !newHabit.title.trim()}
@@ -182,20 +305,27 @@ export default function Home() {
         )}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {habits.map((habit) => (
+          {filteredHabits.map((habit) => (
             <HabitCard
               key={habit._id}
+              id={habit._id}
               title={habit.title}
               description={habit.description}
+              category={habit.category}
+              frequency={habit.frequency}
+              targetDays={habit.targetDays}
               streak={habit.streak}
-              onCheckIn={() => handleCheckIn(habit._id)}
+              longestStreak={habit.longestStreak}
+              onCheckIn={handleCheckIn}
+              onDelete={handleDeleteHabit}
+              onArchive={handleArchiveHabit}
             />
           ))}
         </div>
 
-        {habits.length === 0 && !isLoading && (
+        {filteredHabits.length === 0 && !isLoading && (
           <div className="text-center text-gray-600">
-            No habits yet. Create your first habit to get started!
+            {showArchived ? 'No archived habits yet.' : 'No habits yet. Create your first habit to get started!'}
           </div>
         )}
       </div>
